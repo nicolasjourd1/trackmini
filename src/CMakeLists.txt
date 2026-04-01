@@ -1,4 +1,5 @@
 add_library(engine STATIC
+    engine/GameLoop.cpp
     platform/Window.cpp
 )
 

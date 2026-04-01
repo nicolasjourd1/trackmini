@@ -55,6 +55,6 @@ class Window
     int m_height = 0;
 };
 
-} // namespace tm::platform
+} // namespace trackmini::platform
 
 #endif /* WINDOW_H_ */

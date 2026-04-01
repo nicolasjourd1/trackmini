@@ -1,10 +1,10 @@
-#include <chrono>
+#include <SDL3/SDL.h>
+#include <glad/glad.h>
 #include <print>
 
-#include <SDL3/SDL.h>
-
+#include "engine/EventBus.h"
+#include "engine/GameLoop.h"
 #include "platform/Window.h"
-#include <glad/glad.h>
 
 int
 main()
@@ -19,28 +19,69 @@ main()
 
     auto& window = *result;
 
+    // Event bus
+    trackmini::engine::EventBus bus;
+
     bool running = true;
-    auto t0 = std::chrono::steady_clock::now();
+    bus.subscribe<trackmini::engine::Events::QuitRequested>(
+      [&running](auto const&) { running = false; });
+    bus.subscribe<trackmini::engine::Events::KeyPressed>(
+      [&running](trackmini::engine::Events::KeyPressed const& e) {
+          if (e.scancode == SDL_SCANCODE_ESCAPE)
+              running = false;
+      });
 
-    while (running) {
-        SDL_Event event;
-        while (SDL_PollEvent(&event)) {
-            if (event.type == SDL_EVENT_QUIT)
-                running = false;
-            if (event.type == SDL_EVENT_KEY_DOWN &&
-                event.key.scancode == SDL_SCANCODE_ESCAPE)
-                running = false;
-        }
+    // Callbacks
+    trackmini::engine::GameLoopCallbacks callbacks{
+        .fixed_update =
+          [](trackmini::engine::Duration /* dt*/) {
+              // nothing here yet
+          },
 
-        glClearColor(0.05f, 0.07f, 0.12f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        .update =
+          [](trackmini::engine::Duration /* dt */, double /* alpha */) {
+              // nothing here yet
+          },
 
-        window.swap_buffers();
-    }
+        .render =
+          [&window](double /* alpha */) {
+              glClearColor(0.05f, 0.07f, 0.12f, 1.0f);
+              glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+              window.swap_buffers();
+          },
 
-    auto elapsed = std::chrono::steady_clock::now() - t0;
-    std::println("[Main] Session: {:.1f}s",
-                 std::chrono::duration<double>(elapsed).count());
+        .is_running = [&running]() { return running; },
+
+        .poll_events =
+          [&bus]() {
+              SDL_Event e;
+              while (SDL_PollEvent(&e)) {
+                  switch (e.type) {
+                      case SDL_EVENT_QUIT:
+                          bus.emit(trackmini::engine::Events::QuitRequested{});
+                          break;
+                      case SDL_EVENT_KEY_DOWN:
+                          bus.emit(trackmini::engine::Events::KeyPressed{
+                            .scancode = e.key.scancode,
+                            .repeat = e.key.repeat });
+                          break;
+                      case SDL_EVENT_KEY_UP:
+                          bus.emit(trackmini::engine::Events::KeyReleased{
+                            .scancode = e.key.scancode,
+                          });
+                          break;
+                      default:
+                          break;
+                  }
+              }
+          }
+    };
+
+    trackmini::engine::GameLoop loop(std::move(callbacks));
+    loop.run();
+
+    auto s = loop.stats();
+    std::println("[Main] Avg FPS: {:.1f}", s.average_fps);
 
     SDL_Quit();
     return 0;

@@ -12,3 +12,4 @@ FetchContent_MakeAvailable(googletest)
 include(GoogleTest)
 
 add_subdirectory(platform)
+add_subdirectory(engine)

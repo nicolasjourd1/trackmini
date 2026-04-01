@@ -102,4 +102,4 @@ Window::swap_buffers() const
     SDL_GL_SwapWindow(m_window);
 }
 
-} // namespace tm::platform
+}
