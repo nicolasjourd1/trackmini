@@ -1,88 +1,150 @@
 #include <SDL3/SDL.h>
+#include <array>
 #include <glad/glad.h>
 #include <print>
 
 #include "engine/EventBus.h"
 #include "engine/GameLoop.h"
 #include "platform/Window.h"
+#include "renderer/Buffer.h"
+#include "renderer/Shader.h"
+#include "renderer/VertexArray.h"
+
+struct Vertex
+{
+    float px, py, pz;
+    float cr, cg, cb;
+};
 
 int
 main()
 {
-    auto result = trackmini::platform::Window::create(
-      { .title = "Trackmini", .width = 1280, .height = 720, .vsync = true });
-
-    if (!result) {
-        std::println(stderr, "[FATAL] {}", result.error().message);
+    auto win_result = trackmini::platform::Window::create({
+      .title = "Trackmini",
+      .width = 1280,
+      .height = 720,
+      .vsync = true,
+    });
+    if (!win_result) {
+        std::println(stderr, "[FATAL] {}", win_result.error().message);
         return 1;
     }
+    auto& window = *win_result;
 
-    auto& window = *result;
+    auto shader_result = trackmini::renderer::ShaderProgram::from_files(
+      "assets/shaders/triangle.vert", "assets/shaders/triangle.frag");
+    if (!shader_result) {
+        std::println(stderr, "[FATAL] {}", shader_result.error().message);
+        return 1;
+    }
+    auto& shader = *shader_result;
 
-    // Event bus
+    static constexpr std::array<float, 18> kVertices{ {
+      0.0f,
+      0.5f,
+      0.0f,
+      1.0f,
+      0.2f,
+      0.2f, // up, red
+      -0.5f,
+      -0.5f,
+      0.0f,
+      0.2f,
+      1.0f,
+      0.2f, // down left, vert
+      0.5f,
+      -0.5f,
+      0.0f,
+      0.2f,
+      0.2f,
+      1.0f, // down right, bleu
+    } };
+
+    trackmini::renderer::VertexBuffer vbo;
+    vbo.allocate(kVertices, trackmini::renderer::BufferUsage::StaticDraw);
+
+    static constexpr std::array<trackmini::renderer::VertexAttrib, 2> kAttribs{
+        {
+          { 0, 3, GL_FLOAT, false, offsetof(Vertex, px) },
+          { 1, 3, GL_FLOAT, false, offsetof(Vertex, cr) },
+        }
+    };
+
+    trackmini::renderer::VertexArray vao;
+    vao.add_vertex_buffer(vbo.handle(), kAttribs, sizeof(Vertex));
+
+    // opengl state
+    glEnable(GL_DEPTH_TEST);
+    glViewport(0, 0, window.width(), window.height());
+
     trackmini::engine::EventBus bus;
-
     bool running = true;
+
     bus.subscribe<trackmini::engine::Events::QuitRequested>(
-      [&running](auto const&) { running = false; });
+      [&](auto const&) { running = false; });
     bus.subscribe<trackmini::engine::Events::KeyPressed>(
-      [&running](trackmini::engine::Events::KeyPressed const& e) {
+      [&](trackmini::engine::Events::KeyPressed const& e) {
           if (e.scancode == SDL_SCANCODE_ESCAPE)
               running = false;
       });
+    bus.subscribe<trackmini::engine::Events::WindowResized>(
+      [&](trackmini::engine::Events::WindowResized const& e) {
+          glViewport(0, 0, e.width, e.height);
+      });
 
-    // Callbacks
-    trackmini::engine::GameLoopCallbacks callbacks{
-        .fixed_update =
-          [](trackmini::engine::Duration /* dt*/) {
-              // nothing here yet
-          },
+    // Game loop
+    trackmini::engine::GameLoop loop{ {
+      .fixed_update = [](trackmini::engine::Duration) {},
+      .update = [](trackmini::engine::Duration, double) {},
 
-        .update =
-          [](trackmini::engine::Duration /* dt */, double /* alpha */) {
-              // nothing here yet
-          },
+      .render =
+        [&](double /*alpha*/) {
+            glClearColor(0.05f, 0.07f, 0.12f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-        .render =
-          [&window](double /* alpha */) {
-              glClearColor(0.05f, 0.07f, 0.12f, 1.0f);
-              glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-              window.swap_buffers();
-          },
+            shader.bind();
+            vao.bind();
+            // GL_TRIANGLES : 3 vertices → 1 triangle
+            glDrawArrays(GL_TRIANGLES, 0, 3);
 
-        .is_running = [&running]() { return running; },
+            window.swap_buffers();
+        },
 
-        .poll_events =
-          [&bus]() {
-              SDL_Event e;
-              while (SDL_PollEvent(&e)) {
-                  switch (e.type) {
-                      case SDL_EVENT_QUIT:
-                          bus.emit(trackmini::engine::Events::QuitRequested{});
-                          break;
-                      case SDL_EVENT_KEY_DOWN:
-                          bus.emit(trackmini::engine::Events::KeyPressed{
-                            .scancode = e.key.scancode,
-                            .repeat = e.key.repeat });
-                          break;
-                      case SDL_EVENT_KEY_UP:
-                          bus.emit(trackmini::engine::Events::KeyReleased{
-                            .scancode = e.key.scancode,
-                          });
-                          break;
-                      default:
-                          break;
-                  }
-              }
-          }
-    };
+      .is_running = [&]() { return running; },
 
-    trackmini::engine::GameLoop loop(std::move(callbacks));
+      .poll_events =
+        [&]() {
+            SDL_Event e;
+            while (SDL_PollEvent(&e)) {
+                switch (e.type) {
+                    case SDL_EVENT_QUIT:
+                        bus.emit(trackmini::engine::Events::QuitRequested{});
+                        break;
+                    case SDL_EVENT_KEY_DOWN:
+                        bus.emit(trackmini::engine::Events::KeyPressed{
+                          .scancode = e.key.scancode,
+                          .repeat = e.key.repeat,
+                        });
+                        break;
+                    case SDL_EVENT_KEY_UP:
+                        bus.emit(trackmini::engine::Events::KeyReleased{
+                          .scancode = e.key.scancode,
+                        });
+                        break;
+                    case SDL_EVENT_WINDOW_RESIZED:
+                        bus.emit(trackmini::engine::Events::WindowResized{
+                          .width = e.window.data1,
+                          .height = e.window.data2,
+                        });
+                        break;
+                    default:
+                        break;
+                }
+            }
+        },
+    } };
+
     loop.run();
-
-    auto s = loop.stats();
-    std::println("[Main] Avg FPS: {:.1f}", s.average_fps);
-
     SDL_Quit();
     return 0;
 }

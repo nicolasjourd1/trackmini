@@ -1,6 +1,8 @@
 add_library(engine STATIC
     engine/GameLoop.cpp
     platform/Window.cpp
+    renderer/Shader.cpp
+    renderer/VertexArray.cpp
 )
 
 target_include_directories(engine PUBLIC
