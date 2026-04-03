@@ -124,9 +124,6 @@ TEST_F(RendererTest, ProgramBindUnbindDoesNotCrash)
     });
 }
 
-// ── Tests GpuBuffer
-// ───────────────────────────────────────────────────────────
-
 TEST_F(RendererTest, VertexBufferAllocatesWithoutError)
 {
     std::array<float, 9> data{ 0, 1, 0, -1, -1, 0, 1, -1, 0 };
@@ -148,9 +145,6 @@ TEST_F(RendererTest, DynamicBufferCanBeUpdated)
     std::array<float, 3> patch{ 9, 9, 9 };
     EXPECT_NO_FATAL_FAILURE(vbo.upload(patch, 0));
 }
-
-// ── Tests VertexArray
-// ─────────────────────────────────────────────────────────
 
 TEST_F(RendererTest, VertexArrayCreatesValidHandle)
 {

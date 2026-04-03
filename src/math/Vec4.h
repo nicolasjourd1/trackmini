@@ -12,18 +12,18 @@ struct Vec4
 
     // Constructors
     constexpr Vec4() noexcept = default;
-    constexpr Vec4(T x, T y, T z, T w) noexcept
-      : x{ x }
-      , y{ y }
-      , z{ z }
-      , w{ w }
+    constexpr Vec4(T x_, T y_, T z_, T w_) noexcept
+      : x{ x_ }
+      , y{ y_ }
+      , z{ z_ }
+      , w{ w_ }
     {
     }
-    constexpr Vec4(Vec3<T> const& v, T w) noexcept
+    constexpr Vec4(Vec3<T> const& v, T w_) noexcept
       : x{ v.x }
       , y{ v.y }
       , z{ v.z }
-      , w{ w }
+      , w{ w_ }
     {
     }
     constexpr explicit Vec4(T scalar) noexcept

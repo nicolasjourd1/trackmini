@@ -18,11 +18,11 @@ struct Quat
     T w{ 1 }, x{ 0 }, y{ 0 }, z{ 0 };
 
     constexpr Quat() noexcept = default;
-    constexpr Quat(T w, T x, T y, T z) noexcept
-      : w{ w }
-      , x{ x }
-      , y{ y }
-      , z{ z }
+        constexpr Quat(T w_, T x_, T y_, T z_) noexcept
+            : w{ w_ }
+            , x{ x_ }
+            , y{ y_ }
+            , z{ z_ }
     {
     }
 
@@ -90,7 +90,9 @@ struct Quat
     [[nodiscard]] Quat normalized() const noexcept
     {
         T n = norm();
-        return n > T{ 1e-10 } ? Quat{ w / n, x / n, y / n, z / n } : identity();
+        return n > static_cast<T>(1e-10)
+                 ? Quat{ w / n, x / n, y / n, z / n }
+                 : identity();
     }
 
     // Conjugate
@@ -147,7 +149,7 @@ struct Quat
         }
 
         // if very close, linear lerp to avoid division by 0
-        if (dot > T{ 0.9995 }) {
+        if (dot > static_cast<T>(0.9995)) {
             return (a + (b2 - a) * t).normalized();
         }
 

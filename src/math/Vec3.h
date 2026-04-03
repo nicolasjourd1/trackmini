@@ -12,10 +12,10 @@ struct Vec3
 
     // Constructors
     constexpr Vec3() noexcept = default;
-    constexpr Vec3(T x, T y, T z) noexcept
-      : x{ x }
-      , y{ y }
-      , z{ z }
+        constexpr Vec3(T x_, T y_, T z_) noexcept
+            : x{ x_ }
+            , y{ y_ }
+            , z{ z_ }
     {
     }
     constexpr explicit Vec3(T scalar) noexcept
@@ -118,7 +118,7 @@ struct Vec3
     [[nodiscard]] Vec3 normalized() const noexcept
     {
         T len = length();
-        return len > T{ 1e-10 } ? (*this / len) : Vec3{};
+        return len > static_cast<T>(1e-10) ? (*this / len) : Vec3{};
     }
 
     [[nodiscard]] static Vec3 lerp(Vec3 const& a, Vec3 const& b, T t) noexcept

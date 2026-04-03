@@ -8,7 +8,7 @@ TEST(EventBusTest, SubscribeAndEmit)
     EventBus bus;
     int call_count = 0;
 
-    bus.subscribe<Events::QuitRequested>(
+        [[maybe_unused]] auto sub_quit = bus.subscribe<Events::QuitRequested>(
       [&](Events::QuitRequested const&) { ++call_count; });
 
     bus.emit(Events::QuitRequested{});
@@ -29,9 +29,12 @@ TEST(EventBusTest, MultipleSubsribersAllCalled)
     EventBus bus;
     int a = 0, b = 0, c = 0;
 
-    bus.subscribe<Events::KeyPressed>([&](auto const&) { ++a; });
-    bus.subscribe<Events::KeyPressed>([&](auto const&) { ++b; });
-    bus.subscribe<Events::KeyPressed>([&](auto const&) { ++c; });
+        [[maybe_unused]] auto sub_a =
+            bus.subscribe<Events::KeyPressed>([&](auto const&) { ++a; });
+        [[maybe_unused]] auto sub_b =
+            bus.subscribe<Events::KeyPressed>([&](auto const&) { ++b; });
+        [[maybe_unused]] auto sub_c =
+            bus.subscribe<Events::KeyPressed>([&](auto const&) { ++c; });
 
     bus.emit(Events::KeyPressed{ .scancode = 1, .repeat = false });
 
@@ -46,10 +49,11 @@ TEST(EventBusTest, EventDataIsPassedCorrectly)
     int received_scancode = -1;
     bool received_repeat = false;
 
-    bus.subscribe<Events::KeyPressed>([&](Events::KeyPressed const& e) {
-        received_scancode = e.scancode;
-        received_repeat = e.repeat;
-    });
+    [[maybe_unused]] auto sub_key =
+      bus.subscribe<Events::KeyPressed>([&](Events::KeyPressed const& e) {
+          received_scancode = e.scancode;
+          received_repeat = e.repeat;
+      });
 
     bus.emit(Events::KeyPressed{ .scancode = 42, .repeat = true });
 
@@ -79,8 +83,10 @@ TEST(EventBusTest, DifferentEventTypesDontCross)
     bool got_quit = false;
     bool got_key = false;
 
-    bus.subscribe<Events::QuitRequested>([&](auto const&) { got_quit = true; });
-    bus.subscribe<Events::KeyPressed>([&](auto const&) { got_key = true; });
+        [[maybe_unused]] auto sub_quit =
+            bus.subscribe<Events::QuitRequested>([&](auto const&) { got_quit = true; });
+        [[maybe_unused]] auto sub_key =
+            bus.subscribe<Events::KeyPressed>([&](auto const&) { got_key = true; });
 
     bus.emit(Events::QuitRequested{});
 

@@ -12,9 +12,9 @@ struct Vec2
 
     // Constructors
     constexpr Vec2() noexcept = default;
-    constexpr Vec2(T x, T y) noexcept
-      : x{ x }
-      , y{ y }
+        constexpr Vec2(T x_, T y_) noexcept
+            : x{ x_ }
+            , y{ y_ }
     {
     }
     constexpr explicit Vec2(T scalar) noexcept
@@ -86,7 +86,7 @@ struct Vec2
     [[nodiscard]] Vec2 normalized() const noexcept
     {
         T len = length();
-        return len > T{ 1e-10 } ? (*this / len) : Vec2{};
+        return len > static_cast<T>(1e-10) ? (*this / len) : Vec2{};
     }
 
     // Index
