@@ -5,6 +5,9 @@ add_library(engine STATIC
     renderer/Mesh.cpp
     renderer/Shader.cpp
     renderer/VertexArray.cpp
+    track/BlockCatalog.cpp
+    track/Grid.cpp
+    track/Track.cpp
 )
 
 target_include_directories(engine PUBLIC
