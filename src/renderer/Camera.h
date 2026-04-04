@@ -50,6 +50,7 @@ class Camera
     }
     [[nodiscard]] math::Vec3f position() const noexcept { return m_position; }
     [[nodiscard]] math::Vec3f target() const noexcept { return m_target; }
+    void set_target(math::Vec3f target) noexcept { m_target = target; }
 
   private:
     Config m_cfg;

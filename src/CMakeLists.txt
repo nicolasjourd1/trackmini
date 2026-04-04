@@ -11,6 +11,9 @@ add_library(engine STATIC
     editor/CommandHistory.cpp
     editor/EditorState.cpp
     editor/TrackRenderer.cpp
+    physics/RigidBody.cpp
+    physics/WheelRaycast.cpp
+    physics/Vehicle.cpp
 )
 
 target_include_directories(engine PUBLIC

@@ -1,3 +1,4 @@
+// src/main.cpp
 #include <SDL3/SDL.h>
 #include <glad/glad.h>
 #include <print>
@@ -7,6 +8,7 @@
 #include "engine/EventBus.h"
 #include "engine/GameLoop.h"
 #include "math/Math.h"
+#include "physics/Vehicle.h"
 #include "platform/Window.h"
 #include "renderer/Camera.h"
 #include "renderer/Mesh.h"
@@ -18,11 +20,6 @@
 int
 main()
 {
-    struct SdlQuitGuard
-    {
-        ~SdlQuitGuard() { SDL_Quit(); }
-    } sdl_quit_guard;
-
     auto win_result = trackmini::platform::Window::create({
       .title = "Trackmini",
       .width = 1280,
@@ -35,7 +32,6 @@ main()
     }
     auto& window = *win_result;
 
-    // Shaders
     auto shader_result = trackmini::renderer::ShaderProgram::from_files(
       "assets/shaders/mesh.vert", "assets/shaders/mesh.frag");
     if (!shader_result) {
@@ -43,32 +39,48 @@ main()
         return 1;
     }
     auto& shader = *shader_result;
-
-    // initialize u_tint to white (dont change color by default)
     float white_tint[3] = { 1.f, 1.f, 1.f };
     shader.set_vec3("u_tint", white_tint);
 
     // Camera
-    trackmini::renderer::Camera camera({
-      .orbit_radius = 4.f,
-      .orbit_pitch = trackmini::math::to_radians(25.f),
-      .orbit_yaw = trackmini::math::to_radians(40.f),
-    });
-
+    trackmini::renderer::Camera camera{ {
+      .orbit_radius = 10.f,
+      .orbit_pitch = trackmini::math::to_radians(30.f),
+      .orbit_yaw = trackmini::math::to_radians(30.f),
+    } };
     trackmini::renderer::UniformBuffer<trackmini::renderer::CameraMatrices>
       cam_ubo;
 
-    // Track and editor
+    // Track
     auto catalog = trackmini::track::BlockCatalog::make_default();
-    trackmini::track::Track track(catalog);
-    trackmini::editor::EditorState editor(track);
+    trackmini::track::Track track{ catalog };
+    trackmini::editor::EditorState editor{ track };
     trackmini::editor::TrackRenderer track_renderer{ shader };
 
-    // OpenGL state
-    glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE); // backface culling
-    glCullFace(GL_BACK);
-    glViewport(0, 0, window.width(), window.height());
+    // Test track
+    for (int i = -4; i <= 4; ++i)
+        track.place_block({ static_cast<int16_t>(i), 0, 0 },
+                          trackmini::track::BlockId::Road);
+    track.place_block({ 5, 0, 0 }, trackmini::track::BlockId::Finish);
+
+    // Vehicle
+    trackmini::physics::Vehicle vehicle;
+    vehicle.reset({ 0.f, 1.5f, 0.f });
+
+    // Vehicle mesh
+    auto car_data = trackmini::renderer::MeshData::make_cube(0.2f);
+    for (auto& v : car_data.vertices) {
+        v.position.x *= 1.5f;
+        v.position.y *= 0.5f;
+        v.position.z *= 3.0f;
+        v.color = { 0.8f, 0.2f, 0.2f }; // red
+    }
+    trackmini::renderer::Mesh car_mesh{ car_data };
+
+    trackmini::physics::VehicleInput input{};
+
+    // mode (editor or drive)
+    bool drive_mode = false;
 
     // Event bus
     trackmini::engine::EventBus bus;
@@ -76,8 +88,6 @@ main()
     bool mouse_drag = false;
     float last_mx = 0.f, last_my = 0.f;
     float mouse_x = 0.f, mouse_y = 0.f;
-    int screen_w = window.width();
-    int screen_h = window.height();
 
     bus.subscribe<trackmini::engine::Events::QuitRequested>(
       [&](auto const&) { running = false; });
@@ -87,26 +97,40 @@ main()
               case SDL_SCANCODE_ESCAPE:
                   running = false;
                   break;
+
+              case SDL_SCANCODE_F1:
+                  drive_mode = !drive_mode;
+                  std::println("[Mode] {}", drive_mode ? "Drive" : "Editor");
+                  if (drive_mode)
+                      vehicle.reset({ 0.f, 1.5f, 0.f });
+                  break;
+
+              // Editor
               case SDL_SCANCODE_Z:
-                  if (editor.undo())
+                  if (!drive_mode && editor.undo())
                       std::println("[Editor] Undo");
                   break;
               case SDL_SCANCODE_Y:
-                  if (editor.redo())
+                  if (!drive_mode && editor.redo())
                       std::println("[Editor] Redo");
                   break;
               case SDL_SCANCODE_TAB:
-                  editor.cycle_block_forward();
-                  std::println("[Editor] Selected: {}",
-                               static_cast<int>(editor.selected_block()));
+                  if (!drive_mode)
+                      editor.cycle_block_forward();
                   break;
               case SDL_SCANCODE_S:
-                  if (editor.save("track.tm"))
-                      std::println("[Editor] Saved");
+                  if (!drive_mode)
+                      editor.save("track.tmc");
                   break;
               case SDL_SCANCODE_L:
-                  if (editor.load("track.tm"))
-                      std::println("[Editor] Loaded");
+                  if (!drive_mode)
+                      editor.load("track.tmc");
+                  break;
+
+              // Respawn
+              case SDL_SCANCODE_R:
+                  if (drive_mode)
+                      vehicle.reset({ 0.f, 1.5f, 0.f });
                   break;
               default:
                   break;
@@ -114,39 +138,83 @@ main()
       });
     bus.subscribe<trackmini::engine::Events::WindowResized>(
       [&](trackmini::engine::Events::WindowResized const& e) {
-          screen_w = e.width;
-          screen_h = e.height;
           glViewport(0, 0, e.width, e.height);
           camera.set_aspect(static_cast<float>(e.width) /
                             static_cast<float>(e.height));
       });
 
-    // Game loop
+    // OpenGL state
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glViewport(0, 0, window.width(), window.height());
 
+    // Game loop
     trackmini::engine::GameLoop loop{ {
-      .fixed_update = [](trackmini::engine::Duration) {},
+
+      .fixed_update =
+        [&](trackmini::engine::Duration dt) {
+            if (!drive_mode)
+                return;
+
+            auto const* keys = SDL_GetKeyboardState(nullptr);
+            input.throttle = keys[SDL_SCANCODE_UP] ? 1.f : 0.f;
+            input.brake = keys[SDL_SCANCODE_DOWN] ? 1.f : 0.f;
+            input.steer = (keys[SDL_SCANCODE_LEFT] ? 1.f : 0.f) -
+                          (keys[SDL_SCANCODE_RIGHT] ? 1.f : 0.f);
+            input.handbrake = keys[SDL_SCANCODE_SPACE] != 0;
+
+            vehicle.fixed_update(input, static_cast<float>(dt.count()));
+        },
 
       .update =
         [&](trackmini::engine::Duration, double) {
+            // in drive mode, camera follows vehicle
+            if (drive_mode) {
+                auto const& pos = vehicle.body().position;
+                camera.set_target({ pos.x, 0.5f, pos.z });
+            }
+
             camera.update();
-            editor.update_cursor(mouse_x,
-                                 mouse_y,
-                                 screen_w,
-                                 screen_h,
-                                 camera.matrices(),
-                                 camera.position());
+
+            if (!drive_mode) {
+                editor.update_cursor(mouse_x,
+                                     mouse_y,
+                                     window.width(),
+                                     window.height(),
+                                     camera.matrices(),
+                                     camera.position());
+            }
         },
 
       .render =
-        [&](double) {
+        [&](double alpha) {
+            (void)alpha;
             glClearColor(0.08f, 0.09f, 0.13f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
             cam_ubo.upload(camera.matrices());
             cam_ubo.bind_to_slot(0);
-
             shader.bind();
+
+            // Grid and blocks
             track_renderer.render(editor, camera.matrices());
+
+            // Vehicle
+            if (drive_mode) {
+                auto model = vehicle.body().model_matrix();
+                shader.set_mat4("u_model", model.data());
+                float red[3] = { 1.f, 0.f, 0.f };
+                shader.set_vec3("u_tint", red);
+                car_mesh.draw();
+                shader.set_vec3("u_tint", white_tint);
+
+                static int frame_cnt = 0;
+                if (++frame_cnt % 120 == 0)
+                    std::println("[Vehicle] {:.1f} km/h | wheels: {}",
+                                 vehicle.speed_kmh(),
+                                 vehicle.grounded_wheels());
+            }
 
             window.swap_buffers();
         },
@@ -173,20 +241,18 @@ main()
                           .height = e.window.data2,
                         });
                         break;
-
-                    // Caméra orbitale (clic droit)
                     case SDL_EVENT_MOUSE_BUTTON_DOWN:
                         if (e.button.button == SDL_BUTTON_RIGHT) {
                             mouse_drag = true;
                             last_mx = e.button.x;
                             last_my = e.button.y;
                         }
-                        // Clic gauche = placer
-                        if (e.button.button == SDL_BUTTON_LEFT)
-                            editor.place_at_cursor();
-                        // Clic milieu = supprimer
-                        if (e.button.button == SDL_BUTTON_MIDDLE)
-                            editor.remove_at_cursor();
+                        if (!drive_mode) {
+                            if (e.button.button == SDL_BUTTON_LEFT)
+                                editor.place_at_cursor();
+                            if (e.button.button == SDL_BUTTON_MIDDLE)
+                                editor.remove_at_cursor();
+                        }
                         break;
                     case SDL_EVENT_MOUSE_BUTTON_UP:
                         if (e.button.button == SDL_BUTTON_RIGHT)
