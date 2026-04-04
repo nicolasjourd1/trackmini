@@ -8,6 +8,9 @@ add_library(engine STATIC
     track/BlockCatalog.cpp
     track/Grid.cpp
     track/Track.cpp
+    editor/CommandHistory.cpp
+    editor/EditorState.cpp
+    editor/TrackRenderer.cpp
 )
 
 target_include_directories(engine PUBLIC
